@@ -1,0 +1,1220 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="generator" content="pandoc">
+  <title>Faster sampling using within-chain parallelisation</title>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, minimal-ui">
+  <link rel="stylesheet" href="presentation_files/reveal.js-3.3.0.1/css/reveal.css"/>
+
+
+<style type="text/css">
+a.sourceLine { display: inline-block; line-height: 1.25; }
+a.sourceLine { pointer-events: none; color: inherit; text-decoration: inherit; }
+a.sourceLine:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode { white-space: pre; position: relative; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+code.sourceCode { white-space: pre-wrap; }
+a.sourceLine { text-indent: -1em; padding-left: 1em; }
+}
+pre.numberSource a.sourceLine
+  { position: relative; left: -4em; }
+pre.numberSource a.sourceLine::before
+  { content: attr(data-line-number);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; pointer-events: all; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+    color: #aaaaaa;
+  }
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+div.sourceCode
+  {  }
+@media screen {
+a.sourceLine::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+code span.at { color: #7d9029; } /* Attribute */
+code span.bn { color: #40a070; } /* BaseN */
+code span.bu { } /* BuiltIn */
+code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+code span.ch { color: #4070a0; } /* Char */
+code span.cn { color: #880000; } /* Constant */
+code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+code span.dt { color: #902000; } /* DataType */
+code span.dv { color: #40a070; } /* DecVal */
+code span.er { color: #ff0000; font-weight: bold; } /* Error */
+code span.ex { } /* Extension */
+code span.fl { color: #40a070; } /* Float */
+code span.fu { color: #06287e; } /* Function */
+code span.im { } /* Import */
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+code span.op { color: #666666; } /* Operator */
+code span.ot { color: #007020; } /* Other */
+code span.pp { color: #bc7a00; } /* Preprocessor */
+code span.sc { color: #4070a0; } /* SpecialChar */
+code span.ss { color: #bb6688; } /* SpecialString */
+code span.st { color: #4070a0; } /* String */
+code span.va { color: #19177c; } /* Variable */
+code span.vs { color: #4070a0; } /* VerbatimString */
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+</style>
+
+<link rel="stylesheet" href="presentation_files/reveal.js-3.3.0.1/css/theme/solarized.css" id="theme">
+
+
+  <!-- some tweaks to reveal css -->
+  <style type="text/css">
+    .reveal h1 { font-size: 2.0em; }
+    .reveal h2 { font-size: 1.5em;  }
+    .reveal h3 { font-size: 1.25em;	}
+    .reveal h4 { font-size: 1em;	}
+
+    .reveal .slides>section,
+    .reveal .slides>section>section {
+      padding: 0px 0px;
+    }
+
+
+
+    .reveal table {
+      border-width: 1px;
+      border-spacing: 2px;
+      border-style: dotted;
+      border-color: gray;
+      border-collapse: collapse;
+      font-size: 0.7em;
+    }
+
+    .reveal table th {
+      border-width: 1px;
+      padding-left: 10px;
+      padding-right: 25px;
+      font-weight: bold;
+      border-style: dotted;
+      border-color: gray;
+    }
+
+    .reveal table td {
+      border-width: 1px;
+      padding-left: 10px;
+      padding-right: 25px;
+      border-style: dotted;
+      border-color: gray;
+    }
+
+
+  </style>
+
+    <style type="text/css">code{white-space: pre;}</style>
+
+    <link rel="stylesheet" href="static/default.css"/>
+
+<!-- Printing and PDF exports -->
+<script id="paper-css" type="application/dynamic-css">
+
+/* Default Print Stylesheet Template
+   by Rob Glazebrook of CSSnewbie.com
+   Last Updated: June 4, 2008
+
+   Feel free (nay, compelled) to edit, append, and
+   manipulate this file as you see fit. */
+
+
+@media print {
+
+	/* SECTION 1: Set default width, margin, float, and
+	   background. This prevents elements from extending
+	   beyond the edge of the printed page, and prevents
+	   unnecessary background images from printing */
+	html {
+		background: #fff;
+		width: auto;
+		height: auto;
+		overflow: visible;
+	}
+	body {
+		background: #fff;
+		font-size: 20pt;
+		width: auto;
+		height: auto;
+		border: 0;
+		margin: 0 5%;
+		padding: 0;
+		overflow: visible;
+		float: none !important;
+	}
+
+	/* SECTION 2: Remove any elements not needed in print.
+	   This would include navigation, ads, sidebars, etc. */
+	.nestedarrow,
+	.controls,
+	.fork-reveal,
+	.share-reveal,
+	.state-background,
+	.reveal .progress,
+	.reveal .backgrounds {
+		display: none !important;
+	}
+
+	/* SECTION 3: Set body font face, size, and color.
+	   Consider using a serif font for readability. */
+	body, p, td, li, div {
+		font-size: 20pt!important;
+		font-family: Georgia, "Times New Roman", Times, serif !important;
+		color: #000;
+	}
+
+	/* SECTION 4: Set heading font face, sizes, and color.
+	   Differentiate your headings from your body text.
+	   Perhaps use a large sans-serif for distinction. */
+	h1,h2,h3,h4,h5,h6 {
+		color: #000!important;
+		height: auto;
+		line-height: normal;
+		font-family: Georgia, "Times New Roman", Times, serif !important;
+		text-shadow: 0 0 0 #000 !important;
+		text-align: left;
+		letter-spacing: normal;
+	}
+	/* Need to reduce the size of the fonts for printing */
+	h1 { font-size: 28pt !important;  }
+	h2 { font-size: 24pt !important; }
+	h3 { font-size: 22pt !important; }
+	h4 { font-size: 22pt !important; font-variant: small-caps; }
+	h5 { font-size: 21pt !important; }
+	h6 { font-size: 20pt !important; font-style: italic; }
+
+	/* SECTION 5: Make hyperlinks more usable.
+	   Ensure links are underlined, and consider appending
+	   the URL to the end of the link for usability. */
+	a:link,
+	a:visited {
+		color: #000 !important;
+		font-weight: bold;
+		text-decoration: underline;
+	}
+	/*
+	.reveal a:link:after,
+	.reveal a:visited:after {
+		content: " (" attr(href) ") ";
+		color: #222 !important;
+		font-size: 90%;
+	}
+	*/
+
+
+	/* SECTION 6: more reveal.js specific additions by @skypanther */
+	ul, ol, div, p {
+		visibility: visible;
+		position: static;
+		width: auto;
+		height: auto;
+		display: block;
+		overflow: visible;
+		margin: 0;
+		text-align: left !important;
+	}
+	.reveal pre,
+	.reveal table {
+		margin-left: 0;
+		margin-right: 0;
+	}
+	.reveal pre code {
+		padding: 20px;
+		border: 1px solid #ddd;
+	}
+	.reveal blockquote {
+		margin: 20px 0;
+	}
+	.reveal .slides {
+		position: static !important;
+		width: auto !important;
+		height: auto !important;
+
+		left: 0 !important;
+		top: 0 !important;
+		margin-left: 0 !important;
+		margin-top: 0 !important;
+		padding: 0 !important;
+		zoom: 1 !important;
+
+		overflow: visible !important;
+		display: block !important;
+
+		text-align: left !important;
+		-webkit-perspective: none;
+		   -moz-perspective: none;
+		    -ms-perspective: none;
+		        perspective: none;
+
+		-webkit-perspective-origin: 50% 50%;
+		   -moz-perspective-origin: 50% 50%;
+		    -ms-perspective-origin: 50% 50%;
+		        perspective-origin: 50% 50%;
+	}
+	.reveal .slides section {
+		visibility: visible !important;
+		position: static !important;
+		width: auto !important;
+		height: auto !important;
+		display: block !important;
+		overflow: visible !important;
+
+		left: 0 !important;
+		top: 0 !important;
+		margin-left: 0 !important;
+		margin-top: 0 !important;
+		padding: 60px 20px !important;
+		z-index: auto !important;
+
+		opacity: 1 !important;
+
+		page-break-after: always !important;
+
+		-webkit-transform-style: flat !important;
+		   -moz-transform-style: flat !important;
+		    -ms-transform-style: flat !important;
+		        transform-style: flat !important;
+
+		-webkit-transform: none !important;
+		   -moz-transform: none !important;
+		    -ms-transform: none !important;
+		        transform: none !important;
+
+		-webkit-transition: none !important;
+		   -moz-transition: none !important;
+		    -ms-transition: none !important;
+		        transition: none !important;
+	}
+	.reveal .slides section.stack {
+		padding: 0 !important;
+	}
+	.reveal section:last-of-type {
+		page-break-after: avoid !important;
+	}
+	.reveal section .fragment {
+		opacity: 1 !important;
+		visibility: visible !important;
+
+		-webkit-transform: none !important;
+		   -moz-transform: none !important;
+		    -ms-transform: none !important;
+		        transform: none !important;
+	}
+	.reveal section img {
+		display: block;
+		margin: 15px 0px;
+		background: rgba(255,255,255,1);
+		border: 1px solid #666;
+		box-shadow: none;
+	}
+
+	.reveal section small {
+		font-size: 0.8em;
+	}
+
+}  
+</script>
+
+
+<script id="pdf-css" type="application/dynamic-css">
+    
+/**
+ * This stylesheet is used to print reveal.js
+ * presentations to PDF.
+ *
+ * https://github.com/hakimel/reveal.js#pdf-export
+ */
+
+* {
+	-webkit-print-color-adjust: exact;
+}
+
+body {
+	margin: 0 auto !important;
+	border: 0;
+	padding: 0;
+	float: none !important;
+	overflow: visible;
+}
+
+html {
+	width: 100%;
+	height: 100%;
+	overflow: visible;
+}
+
+/* Remove any elements not needed in print. */
+.nestedarrow,
+.reveal .controls,
+.reveal .progress,
+.reveal .playback,
+.reveal.overview,
+.fork-reveal,
+.share-reveal,
+.state-background {
+	display: none !important;
+}
+
+h1, h2, h3, h4, h5, h6 {
+	text-shadow: 0 0 0 #000 !important;
+}
+
+.reveal pre code {
+	overflow: hidden !important;
+	font-family: Courier, 'Courier New', monospace !important;
+}
+
+ul, ol, div, p {
+	visibility: visible;
+	position: static;
+	width: auto;
+	height: auto;
+	display: block;
+	overflow: visible;
+	margin: auto;
+}
+.reveal {
+	width: auto !important;
+	height: auto !important;
+	overflow: hidden !important;
+}
+.reveal .slides {
+	position: static;
+	width: 100%;
+	height: auto;
+
+	left: auto;
+	top: auto;
+	margin: 0 !important;
+	padding: 0 !important;
+
+	overflow: visible;
+	display: block;
+
+	-webkit-perspective: none;
+	   -moz-perspective: none;
+	    -ms-perspective: none;
+	        perspective: none;
+
+	-webkit-perspective-origin: 50% 50%; /* there isn't a none/auto value but 50-50 is the default */
+	   -moz-perspective-origin: 50% 50%;
+	    -ms-perspective-origin: 50% 50%;
+	        perspective-origin: 50% 50%;
+}
+
+.reveal .slides section {
+	page-break-after: always !important;
+
+	visibility: visible !important;
+	position: relative !important;
+	display: block !important;
+	position: relative !important;
+
+	margin: 0 !important;
+	padding: 0 !important;
+	box-sizing: border-box !important;
+	min-height: 1px;
+
+	opacity: 1 !important;
+
+	-webkit-transform-style: flat !important;
+	   -moz-transform-style: flat !important;
+	    -ms-transform-style: flat !important;
+	        transform-style: flat !important;
+
+	-webkit-transform: none !important;
+	   -moz-transform: none !important;
+	    -ms-transform: none !important;
+	        transform: none !important;
+}
+
+.reveal section.stack {
+	margin: 0 !important;
+	padding: 0 !important;
+	page-break-after: avoid !important;
+	height: auto !important;
+	min-height: auto !important;
+}
+
+.reveal img {
+	box-shadow: none;
+}
+
+.reveal .roll {
+	overflow: visible;
+	line-height: 1em;
+}
+
+/* Slide backgrounds are placed inside of their slide when exporting to PDF */
+.reveal section .slide-background {
+	display: block !important;
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	z-index: -1;
+}
+
+/* All elements should be above the slide-background */
+.reveal section>* {
+	position: relative;
+	z-index: 1;
+}
+
+/* Display slide speaker notes when 'showNotes' is enabled */
+.reveal .speaker-notes-pdf {
+	display: block;
+	width: 100%;
+	max-height: none;
+	left: auto;
+	top: auto;
+	z-index: 100;
+}
+
+/* Display slide numbers when 'slideNumber' is enabled */
+.reveal .slide-number-pdf {
+	display: block;
+	position: absolute;
+	font-size: 14px;
+}
+
+</script>
+
+
+<script>
+var style = document.createElement( 'style' );
+style.type = 'text/css';
+var style_script_id = window.location.search.match( /print-pdf/gi ) ? 'pdf-css' : 'paper-css';
+var style_script = document.getElementById(style_script_id).text;
+style.innerHTML = style_script;
+document.getElementsByTagName('head')[0].appendChild(style);
+</script>
+
+    <link href="presentation_files/font-awesome-5.3.1/css/fontawesome-all.min.css" rel="stylesheet" />
+    <script src="presentation_files/kePrint-0.0.1/kePrint.js"></script>
+</head>
+<body>
+  <div class="reveal">
+    <div class="slides">
+
+<section>
+    <h1 class="title">Faster sampling using within-chain parallelisation</h1>
+    <h2 class="author"><div class="line-block">Brian Callander<br />
+<i class="fas  fa-rss "></i> BrianCallander.com <i class="fab  fa-twitter "></i> <span class="citation" data-cites="mcbricall">@mcbricall</span></div></h2>
+    <h3 class="date">6th November 2019</h3>
+</section>
+
+<section><section id="why" class="title-slide slide level1"><h1>Why?</h1></section><section id="x-speedup-per-chain" class="slide level2">
+<h2>4x speedup per chain!</h2>
+<ul>
+<li>Full Bayes can be sloooooow 🐢</li>
+<li>Adding more chains is easy 🤩</li>
+<li>You can also run a single chain in parallel! 🤓</li>
+</ul>
+<aside class="notes">
+• Assuming 4 cores per chain
+</aside>
+<div style="visibility:hidden;display:none">
+<p><span class="math display">\[
+   \DeclareMathOperator{\dbinomial}{Binomial}
+   \DeclareMathOperator{\dbernoulli}{Bernoulli}
+   \DeclareMathOperator{\dpoisson}{Poisson}
+   \DeclareMathOperator{\dnormal}{Normal}
+   \DeclareMathOperator{\dt}{t}
+   \DeclareMathOperator{\dcauchy}{Cauchy}
+   \DeclareMathOperator{\dexponential}{Exp}
+   \DeclareMathOperator{\duniform}{Uniform}
+   \DeclareMathOperator{\dgamma}{Gamma}
+   \DeclareMathOperator{\dinvgamma}{InvGamma}
+   \DeclareMathOperator{\invlogit}{Logistic^{-1}}
+   \DeclareMathOperator{\logistic}{Logistic}
+   \DeclareMathOperator{\ddirichlet}{Dirichlet}
+   \DeclareMathOperator{\dbeta}{Beta}
+\]</span></p>
+</div>
+</section><section id="useful-examples" class="slide level2">
+<h2>Useful examples</h2>
+<ul>
+<li><a href="https://mc-stan.org/docs/2_19/stan-users-guide/example-hierarchical-logistic-regression.html">Sane indexing</a></li>
+<li><a href="https://mc-stan.org/docs/2_19/stan-users-guide/ragged-inputs-and-outputs.html">Different number of observations per level</a></li>
+<li>Hierarchical</li>
+<li>Can use a brms workflow</li>
+</ul>
+<p><a href="https://twitter.com/dan_p_simpson/status/1184135201854763008"><img data-src="static/dan_simpson_hates_8schools_problem.png" alt="xxx" /></a></p>
+<aside class="notes">
+• Not many examples reflect my typical usecase * Does pymc do this?
+</aside>
+</section><section id="caveats" class="slide level2">
+<h2>Caveats</h2>
+<ul>
+<li>Requires changes to stan code</li>
+<li>You’ll need a whole bunch of cores</li>
+<li><a href="https://github.com/paul-buerkner/brms/issues/564">brms won’t implement it</a> until stan 3</li>
+</ul>
+<p><img data-src="static/brms_will_not_implement.png" /></p>
+</section><section id="today" class="slide level2">
+<h2>Today</h2>
+<ul>
+<li>We’ll map a (simple) hierarchical logistic regression</li>
+<li>We’ll turn it into a brms object</li>
+<li>Break up into groups to get people setup up with map_rect</li>
+</ul>
+<aside class="notes">
+• whoever is interested
+</aside>
+</section></section>
+<section><section id="the-idea" class="title-slide slide level1"><h1>The Idea</h1></section><section id="usual-hmc" class="slide level2">
+<h2>Usual HMC</h2>
+<p><img data-src="./static/hmc.svg" alt="Sampling is sequential" /></p>
+<aside class="notes">
+• Sequential • Need all of one block before moving on
+</aside>
+</section><section id="mapped-hmc" class="slide level2">
+<h2>Mapped HMC</h2>
+<p><img data-src="./static/map_rect.svg" alt="Parallelise the calculation at each step" /></p>
+<aside class="notes">
+<ul>
+<li>you can break down your dataset into shards,</li>
+<li>calculate the log-likelihood on each shard in parallel,</li>
+<li>sum up the log-likelihood of each shard at the end.</li>
+<li>vectorisation vs parallelisation</li>
+</ul>
+</aside>
+</section><section id="logistic-regression" class="slide level2">
+<h2>Logistic regression</h2>
+<p><span class="math display">\[
+\begin{align}
+  y_i 
+  &amp;\sim 
+  \dbernoulli(p_i)
+  \\
+  p_i
+  &amp;=
+  \logistic^{-1}(\mu + \sigma \alpha_i)
+  \\
+  \mu
+  &amp;\sim
+  \dnormal(0, 1) \quad \text{(intercept)}
+  \\
+  \alpha_i
+  &amp;\sim
+  \dnormal(0, 1) \quad \text{(random effects)}
+  \\
+  \sigma
+  &amp;\sim
+  \dnormal_+\left(0, 0.5 \right) 
+\end{align}
+\]</span></p>
+<aside class="notes">
+<ul>
+<li>this is the model for today</li>
+</ul>
+</aside>
+</section><section id="stan-logistic-regression" class="slide level2">
+<h2>Stan: logistic regression</h2>
+<pre class="stan"><code>data {...}
+
+parameters {...}
+
+model {
+  sigma ~ normal(0, 0.5); 
+  alpha ~ normal(0, 1);
+  mu ~ normal(0, 1);
+  for (i in 1:N) {
+    y ~ bernoulli_logit_lpmf(
+      mu + sigma * alpha[level[i]]
+    );
+  }
+}</code></pre>
+<aside class="notes">
+<ul>
+<li>this is the stan implementation</li>
+<li>this is for illustration…there are more efficient ways</li>
+</ul>
+</aside>
+</section><section id="map_rect" class="slide level2">
+<h2>map_rect</h2>
+<p>See <a href="./models/logistic_regression_mapped.stan">stan code</a>.</p>
+<aside class="notes">
+<ul>
+<li>create shards = transformed data</li>
+<li>function for each shard = functions</li>
+<li>sum result (reduce) = model</li>
+</ul>
+</aside>
+</section></section>
+<section><section id="setup" class="title-slide slide level1"><h1>Setup</h1></section><section id="makevars" class="slide level2">
+<h2>Makevars</h2>
+<pre><code>CXX14FLAGS = -O3 -march=native -mtune=native
+CXX14FLAGS += -fPIC
+CXX14FLAGS += -DSTAN_THREADS
+CXX14FLAGS += -pthread</code></pre>
+<p>Your <code>~/.R/Makevars</code> file should have threads enabled. Check out the <a href="https://github.com/stan-dev/math/wiki/Threading-Support">official docs for more info</a>.</p>
+<aside class="notes">
+<ul>
+<li>i’m not familiar with C++</li>
+<li>just follow dev’s advice</li>
+</ul>
+</aside>
+</section><section id="environment" class="slide level2">
+<h2>Environment</h2>
+<p>Tell Stan how many threads are available.</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode bash"><code class="sourceCode bash"><a class="sourceLine" id="cb3-1" data-line-number="1"><span class="ex">nproc</span> --all <span class="co"># number of threads available</span></a></code></pre></div>
+<pre><code>4</code></pre>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb5-1" data-line-number="1"><span class="kw">Sys.setenv</span>(<span class="dt">STAN_NUM_THREADS =</span> <span class="dv">4</span>)</a></code></pre></div>
+<p>Now we’re ready to go!</p>
+</section></section>
+<section><section id="example" class="title-slide slide level1"><h1>Example</h1></section><section id="simulate" class="slide level2">
+<h2>Simulate</h2>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb6-1" data-line-number="1">N &lt;-<span class="st"> </span><span class="dv">40000</span> <span class="co"># number of observations</span></a>
+<a class="sourceLine" id="cb6-2" data-line-number="2">L &lt;-<span class="st"> </span><span class="dv">20</span>    <span class="co"># number of unique levels in our factor</span></a>
+<a class="sourceLine" id="cb6-3" data-line-number="3">intercept &lt;-<span class="st"> </span><span class="kw">rnorm</span>(<span class="dv">1</span>, <span class="dv">0</span>, <span class="dv">1</span>)</a>
+<a class="sourceLine" id="cb6-4" data-line-number="4">pop_stddev &lt;-<span class="st"> </span><span class="kw">abs</span>(<span class="kw">rnorm</span>(<span class="dv">1</span>, <span class="dv">0</span>, <span class="fl">0.5</span>))</a>
+<a class="sourceLine" id="cb6-5" data-line-number="5"></a>
+<a class="sourceLine" id="cb6-6" data-line-number="6">df &lt;-<span class="st"> </span><span class="kw">tibble</span>(<span class="dt">factr =</span> <span class="dv">1</span><span class="op">:</span>L) <span class="op">%&gt;%</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb6-7" data-line-number="7"><span class="st">  </span><span class="kw">mutate</span>(<span class="dt">coef =</span> <span class="kw">rnorm</span>(<span class="kw">n</span>(), <span class="dv">0</span>, <span class="dv">1</span>)) <span class="op">%&gt;%</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb6-8" data-line-number="8"><span class="st">  </span><span class="kw">sample_n</span>(N, <span class="dt">replace =</span> <span class="ot">TRUE</span>) <span class="op">%&gt;%</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb6-9" data-line-number="9"><span class="st">  </span><span class="kw">mutate</span>(</a>
+<a class="sourceLine" id="cb6-10" data-line-number="10">    <span class="dt">intercept =</span> intercept,</a>
+<a class="sourceLine" id="cb6-11" data-line-number="11">    <span class="dt">pop_stddev =</span> pop_stddev,</a>
+<a class="sourceLine" id="cb6-12" data-line-number="12">    <span class="dt">linear =</span> intercept <span class="op">+</span><span class="st"> </span>coef <span class="op">*</span><span class="st"> </span>pop_stddev,</a>
+<a class="sourceLine" id="cb6-13" data-line-number="13">    <span class="dt">p =</span> <span class="kw">inv_logistic</span>(linear),</a>
+<a class="sourceLine" id="cb6-14" data-line-number="14">    <span class="dt">y =</span> <span class="kw">rbinom</span>(<span class="kw">n</span>(), <span class="dv">1</span>, p),</a>
+<a class="sourceLine" id="cb6-15" data-line-number="15">    <span class="dt">factr =</span> factr <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">as_factor</span>() <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">fct_reorder</span>(factr)</a>
+<a class="sourceLine" id="cb6-16" data-line-number="16">  ) </a></code></pre></div>
+<aside class="notes">
+<ul>
+<li>data generating process</li>
+</ul>
+</aside>
+</section><section id="data" class="slide level2">
+<h2>Data</h2>
+<table class="table table-striped table-hover table-responsive table-condensed" style="margin-left: auto; margin-right: auto;">
+<caption>
+Sample output
+</caption>
+<thead>
+<tr>
+<th style="text-align:left;">
+factr
+</th>
+<th style="text-align:right;">
+coef
+</th>
+<th style="text-align:right;">
+intercept
+</th>
+<th style="text-align:right;">
+pop_stddev
+</th>
+<th style="text-align:right;">
+linear
+</th>
+<th style="text-align:right;">
+p
+</th>
+<th style="text-align:right;">
+y
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+19
+</td>
+<td style="text-align:right;">
+0.034
+</td>
+<td style="text-align:right;">
+0.206
+</td>
+<td style="text-align:right;">
+0.785
+</td>
+<td style="text-align:right;">
+0.233
+</td>
+<td style="text-align:right;">
+0.558
+</td>
+<td style="text-align:right;">
+1
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+5
+</td>
+<td style="text-align:right;">
+0.671
+</td>
+<td style="text-align:right;">
+0.206
+</td>
+<td style="text-align:right;">
+0.785
+</td>
+<td style="text-align:right;">
+0.733
+</td>
+<td style="text-align:right;">
+0.675
+</td>
+<td style="text-align:right;">
+1
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+10
+</td>
+<td style="text-align:right;">
+-1.089
+</td>
+<td style="text-align:right;">
+0.206
+</td>
+<td style="text-align:right;">
+0.785
+</td>
+<td style="text-align:right;">
+-0.648
+</td>
+<td style="text-align:right;">
+0.343
+</td>
+<td style="text-align:right;">
+1
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+17
+</td>
+<td style="text-align:right;">
+-2.538
+</td>
+<td style="text-align:right;">
+0.206
+</td>
+<td style="text-align:right;">
+0.785
+</td>
+<td style="text-align:right;">
+-1.785
+</td>
+<td style="text-align:right;">
+0.144
+</td>
+<td style="text-align:right;">
+0
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+6
+</td>
+<td style="text-align:right;">
+-1.568
+</td>
+<td style="text-align:right;">
+0.206
+</td>
+<td style="text-align:right;">
+0.785
+</td>
+<td style="text-align:right;">
+-1.025
+</td>
+<td style="text-align:right;">
+0.264
+</td>
+<td style="text-align:right;">
+1
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+1
+</td>
+<td style="text-align:right;">
+0.069
+</td>
+<td style="text-align:right;">
+0.206
+</td>
+<td style="text-align:right;">
+0.785
+</td>
+<td style="text-align:right;">
+0.260
+</td>
+<td style="text-align:right;">
+0.565
+</td>
+<td style="text-align:right;">
+1
+</td>
+</tr>
+</tbody>
+</table>
+<aside class="notes">
+<ul>
+<li>point out observed vs latent data</li>
+</ul>
+</aside>
+</section><section id="unmapped-model" class="slide level2">
+<h2>Unmapped model</h2>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb7-1" data-line-number="1">formula &lt;-<span class="st"> </span><span class="kw">brmsformula</span>(</a>
+<a class="sourceLine" id="cb7-2" data-line-number="2">  y <span class="op">~</span><span class="st"> </span><span class="dv">1</span> <span class="op">+</span><span class="st"> </span>(<span class="dv">1</span> <span class="op">|</span><span class="st"> </span>factr),</a>
+<a class="sourceLine" id="cb7-3" data-line-number="3">  <span class="dt">family =</span> <span class="kw">bernoulli</span>()</a>
+<a class="sourceLine" id="cb7-4" data-line-number="4">)</a>
+<a class="sourceLine" id="cb7-5" data-line-number="5">prior &lt;-<span class="st"> </span><span class="kw">c</span>(</a>
+<a class="sourceLine" id="cb7-6" data-line-number="6">  <span class="kw">prior</span>(<span class="kw">normal</span>(<span class="dv">0</span>, <span class="dv">1</span>), <span class="dt">class =</span> <span class="st">&#39;Intercept&#39;</span>),</a>
+<a class="sourceLine" id="cb7-7" data-line-number="7">  <span class="kw">prior</span>(<span class="kw">normal</span>(<span class="dv">0</span>, <span class="dv">1</span>), <span class="dt">class =</span> <span class="st">&#39;sd&#39;</span>)</a>
+<a class="sourceLine" id="cb7-8" data-line-number="8">)</a>
+<a class="sourceLine" id="cb7-9" data-line-number="9"></a>
+<a class="sourceLine" id="cb7-10" data-line-number="10">unmapped &lt;-<span class="st"> </span>brms<span class="op">::</span><span class="kw">brm</span>(</a>
+<a class="sourceLine" id="cb7-11" data-line-number="11">  <span class="dt">formula =</span> formula,</a>
+<a class="sourceLine" id="cb7-12" data-line-number="12">  <span class="dt">prior =</span> prior,</a>
+<a class="sourceLine" id="cb7-13" data-line-number="13">  <span class="dt">data =</span> df,</a>
+<a class="sourceLine" id="cb7-14" data-line-number="14">  <span class="dt">chains =</span> <span class="dv">0</span> <span class="co"># just compile for now</span></a>
+<a class="sourceLine" id="cb7-15" data-line-number="15">)</a></code></pre></div>
+<aside class="notes">
+<ul>
+<li>just compile for now</li>
+</ul>
+</aside>
+</section><section id="take-a-look-inside" class="slide level2">
+<h2>Take a look inside</h2>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb8-1" data-line-number="1">unmapped<span class="op">$</span>model</a></code></pre></div>
+<pre><code>// generated with brms 2.8.0
+functions {
+}
+data {
+  int&lt;lower=1&gt; N;  // number of observations
+  int Y[N];  // response variable
+  // data for group-level effects of ID 1
+  int&lt;lower=1&gt; N_1;
+  int&lt;lower=1&gt; M_1;
+  int&lt;lower=1&gt; J_1[N];
+  vector[N] Z_1_1;
+  int prior_only;  // should the likelihood be ignored?
+}
+transformed data {
+}
+parameters {
+  real temp_Intercept;  // temporary intercept
+  vector&lt;lower=0&gt;[M_1] sd_1;  // group-level standard deviations
+  vector[N_1] z_1[M_1];  // unscaled group-level effects
+}
+transformed parameters {
+  // group-level effects
+  vector[N_1] r_1_1 = (sd_1[1] * (z_1[1]));
+}
+model {
+  vector[N] mu = temp_Intercept + rep_vector(0, N);
+  for (n in 1:N) {
+    mu[n] += r_1_1[J_1[n]] * Z_1_1[n];
+  }
+  // priors including all constants
+  target += normal_lpdf(temp_Intercept | 0, 1);
+  target += normal_lpdf(sd_1 | 0, 1)
+    - 1 * normal_lccdf(0 | 0, 1);
+  target += normal_lpdf(z_1[1] | 0, 1);
+  // likelihood including all constants
+  if (!prior_only) {
+    target += bernoulli_logit_lpmf(Y | mu);
+  }
+}
+generated quantities {
+  // actual population-level intercept
+  real b_Intercept = temp_Intercept;
+}</code></pre>
+<aside class="notes">
+<ul>
+<li>how to view underlying stan code</li>
+<li>pretty much same as before but with messier notation</li>
+</ul>
+</aside>
+</section><section id="time-it" class="slide level2">
+<h2>Time it</h2>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb10-1" data-line-number="1">start_unmapped &lt;-<span class="st"> </span><span class="kw">Sys.time</span>()</a>
+<a class="sourceLine" id="cb10-2" data-line-number="2"></a>
+<a class="sourceLine" id="cb10-3" data-line-number="3">model_unmapped &lt;-<span class="st"> </span>unmapped <span class="op">%&gt;%</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb10-4" data-line-number="4"><span class="st">  </span><span class="kw">update</span>(</a>
+<a class="sourceLine" id="cb10-5" data-line-number="5">    <span class="dt">chains =</span> <span class="dv">1</span>,</a>
+<a class="sourceLine" id="cb10-6" data-line-number="6">    <span class="dt">iter =</span> <span class="dv">5000</span>,</a>
+<a class="sourceLine" id="cb10-7" data-line-number="7">    <span class="dt">warmup =</span> <span class="dv">1000</span>,</a>
+<a class="sourceLine" id="cb10-8" data-line-number="8">    <span class="dt">seed =</span> <span class="dv">67029</span></a>
+<a class="sourceLine" id="cb10-9" data-line-number="9">  )</a>
+<a class="sourceLine" id="cb10-10" data-line-number="10"></a>
+<a class="sourceLine" id="cb10-11" data-line-number="11">end_unmapped &lt;-<span class="st"> </span><span class="kw">Sys.time</span>()</a>
+<a class="sourceLine" id="cb10-12" data-line-number="12">duration_unmapped &lt;-<span class="st"> </span>end_unmapped <span class="op">-</span><span class="st"> </span>start_unmapped</a></code></pre></div>
+<p>That took 6.6 minutes.</p>
+</section><section id="mapped-stan-code" class="slide level2">
+<h2>Mapped stan code</h2>
+<pre><code>functions {
+  vector lp(vector global, vector local, real[] xr, int[] xi) {
+    int M = xi[1];
+    int Y[M] = xi[2:M+1];
+    real mu = global[1];    // intercept
+    real sigma = global[2]; // scale of group-level effect
+    real alpha = local[1];  // unscaled group_level effect
+
+    real ll = bernoulli_logit_lpmf(Y | rep_vector(mu + alpha * sigma, M));
+
+    return [ll]&#39;;
+  }
+
+  int[] count(int[] factr, int L) {
+    int N = size(factr);
+    int counts[L] = rep_array(0, L);
+    for (i in 1:N) {
+      counts[factr[i]] += 1;
+    }
+    return counts;
+  }
+}
+
+data {
+  int&lt;lower=1&gt; N;  // number of observations
+  int Y[N];  // response variable
+  // data for group-level effects of ID 1
+  int&lt;lower=1&gt; N_1; // number of levels
+  int&lt;lower=1&gt; M_1;
+  int&lt;lower=1&gt; J_1[N]; // the level of each observation
+  vector[N] Z_1_1;
+  int prior_only;  // should the likelihood be ignored?
+}
+
+transformed data {
+  int&lt;lower = 0, upper = N&gt; counts[N_1] = count(J_1, N_1); // number of observations in each level
+
+  int&lt;lower = 1&gt; S = max(counts) + 1; // size of each shard
+
+  int xi[N_1, S];
+  real xr[N_1, S];
+
+  int&lt;lower = 1&gt; p[N_1] = rep_array(2, N_1); // position of next datapoint
+  xi[, 1] = counts; // first entry is the number of datapoints
+  for (i in 1:N) {
+    int shard = J_1[i]; // shards are indexed by the levels
+    xi[shard, p[shard]] = Y[i];
+    p[shard] += 1;
+  }
+}
+
+parameters {
+  real temp_Intercept;  // temporary intercept
+  vector&lt;lower=0&gt;[M_1] sd_1;  // group-level standard deviations
+  vector[N_1] z_1[M_1];  // unscaled group-level effects
+}
+
+transformed parameters {
+  // group-level effects
+  vector[N_1] r_1_1 = (sd_1[1] * (z_1[1]));
+}
+
+model {
+  vector[2] global = [temp_Intercept, sd_1[1]]&#39;;
+  vector[1] local[N_1];
+  for (j in 1:N_1) { // convert [{1, 2, 3, ...}] into [{1}, {2}, {3}, ...]
+    local[j] = [z_1[1][j]]&#39;;
+  }
+
+  // priors including all constants
+  target += normal_lpdf(temp_Intercept | 0, 1);
+  target += normal_lpdf(sd_1 | 0, 1)
+    - 1 * normal_lccdf(0 | 0, 1);
+  target += normal_lpdf(z_1[1] | 0, 1);
+
+  // likelihood including all constants
+  if (!prior_only) {
+    target += sum(
+      map_rect(lp, global, local, xr, xi)
+    );
+  }
+}
+
+generated quantities {
+  // actual population-level intercept
+  real b_Intercept = temp_Intercept;
+}</code></pre>
+<aside class="notes">
+<ul>
+<li>Same rewriting as before, just with brms notation</li>
+<li>data, parameters, generated quantities all stay the same</li>
+</ul>
+</aside>
+</section><section id="make-it-a-brms-object" class="slide level2">
+<h2>Make it a brms object</h2>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb12-1" data-line-number="1">mapped_base &lt;-<span class="st"> &quot;models/brms_logistic_regression_mapped.stan&quot;</span> <span class="op">%&gt;%</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb12-2" data-line-number="2"><span class="st">  </span>here<span class="op">::</span><span class="kw">here</span>() <span class="op">%&gt;%</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb12-3" data-line-number="3"><span class="st">  </span>rstan<span class="op">::</span><span class="kw">stan_model</span>()</a>
+<a class="sourceLine" id="cb12-4" data-line-number="4"></a>
+<a class="sourceLine" id="cb12-5" data-line-number="5">data &lt;-<span class="st"> </span>brms<span class="op">::</span><span class="kw">make_standata</span>(</a>
+<a class="sourceLine" id="cb12-6" data-line-number="6">  <span class="dt">formula =</span> formula, </a>
+<a class="sourceLine" id="cb12-7" data-line-number="7">  <span class="dt">data =</span> df, </a>
+<a class="sourceLine" id="cb12-8" data-line-number="8">  <span class="dt">prior =</span> prior</a>
+<a class="sourceLine" id="cb12-9" data-line-number="9">)</a>
+<a class="sourceLine" id="cb12-10" data-line-number="10"></a>
+<a class="sourceLine" id="cb12-11" data-line-number="11">mapped_fit &lt;-<span class="st"> </span>mapped_base <span class="op">%&gt;%</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb12-12" data-line-number="12"><span class="st">  </span>rstan<span class="op">::</span><span class="kw">sampling</span>(</a>
+<a class="sourceLine" id="cb12-13" data-line-number="13">    <span class="dt">data =</span> data, </a>
+<a class="sourceLine" id="cb12-14" data-line-number="14">    <span class="dt">chains =</span> <span class="dv">0</span> <span class="co"># just compile for now</span></a>
+<a class="sourceLine" id="cb12-15" data-line-number="15">  )</a>
+<a class="sourceLine" id="cb12-16" data-line-number="16"></a>
+<a class="sourceLine" id="cb12-17" data-line-number="17">mapped &lt;-<span class="st"> </span>unmapped <span class="op">%&gt;%</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb12-18" data-line-number="18"><span class="st">  </span><span class="kw">list_modify</span>(<span class="dt">fit =</span> mapped_fit)</a></code></pre></div>
+<aside class="notes">
+<ul>
+<li>Fit the model with rstan</li>
+<li>Switch the fit object in brms</li>
+</ul>
+</aside>
+</section><section id="time-it-1" class="slide level2">
+<h2>Time it</h2>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb13-1" data-line-number="1">start_mapped &lt;-<span class="st"> </span><span class="kw">Sys.time</span>()</a>
+<a class="sourceLine" id="cb13-2" data-line-number="2"></a>
+<a class="sourceLine" id="cb13-3" data-line-number="3">model_mapped &lt;-<span class="st"> </span>mapped <span class="op">%&gt;%</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb13-4" data-line-number="4"><span class="st">  </span><span class="kw">update</span>(</a>
+<a class="sourceLine" id="cb13-5" data-line-number="5">    <span class="dt">chains =</span> <span class="dv">1</span>, </a>
+<a class="sourceLine" id="cb13-6" data-line-number="6">    <span class="dt">iter =</span> <span class="dv">5000</span>,</a>
+<a class="sourceLine" id="cb13-7" data-line-number="7">    <span class="dt">warmup =</span> <span class="dv">1000</span>,</a>
+<a class="sourceLine" id="cb13-8" data-line-number="8">    <span class="dt">recompile =</span> <span class="ot">FALSE</span> <span class="co"># keep our custom fit</span></a>
+<a class="sourceLine" id="cb13-9" data-line-number="9">  )</a>
+<a class="sourceLine" id="cb13-10" data-line-number="10"></a>
+<a class="sourceLine" id="cb13-11" data-line-number="11">end_mapped &lt;-<span class="st"> </span><span class="kw">Sys.time</span>()</a>
+<a class="sourceLine" id="cb13-12" data-line-number="12">duration_mapped &lt;-<span class="st"> </span>end_mapped <span class="op">-</span><span class="st"> </span>start_mapped</a></code></pre></div>
+<p>That took 1.4 minutes</p>
+<aside class="notes">
+<ul>
+<li>recompiling will overwrite your fit object</li>
+<li>model just like any other brms model</li>
+</ul>
+</aside>
+</section><section id="comparison" class="slide level2">
+<h2>Comparison</h2>
+<ul>
+<li>Unmapped: 6.6 mins</li>
+<li>Mapped: 1.4 mins</li>
+<li>Speedup: 4.6x</li>
+</ul>
+<aside class="notes">
+<ul>
+<li>Speedup varies but approx linear in #threads</li>
+<li>how to optimise #shards? keep it as readable as possible</li>
+</ul>
+</aside>
+</section><section id="its-still-brms" class="slide level2">
+<h2>It’s still BRMS!</h2>
+<p>Actual <code>intercept=</code>0.206 and <code>pop_stddev=</code>0.785.</p>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb14-1" data-line-number="1">model_mapped <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">summary</span>()</a></code></pre></div>
+<pre><code> Family: bernoulli 
+  Links: mu = logit 
+Formula: y ~ 1 + (1 | factr) 
+   Data: df (Number of observations: 40000) 
+Samples: 1 chains, each with iter = 5000; warmup = 1000; thin = 1;
+         total post-warmup samples = 4000
+
+Group-Level Effects: 
+~factr (Number of levels: 20) 
+              Estimate Est.Error l-95% CI u-95% CI Eff.Sample Rhat
+sd(Intercept)     0.75      0.13     0.55     1.04        200 1.00
+
+Population-Level Effects: 
+          Estimate Est.Error l-95% CI u-95% CI Eff.Sample Rhat
+Intercept    -0.20      0.17    -0.52     0.13        155 1.00
+
+Samples were drawn using sampling(NUTS). For each parameter, Eff.Sample 
+is a crude measure of effective sample size, and Rhat is the potential 
+scale reduction factor on split chains (at convergence, Rhat = 1).</code></pre>
+<aside class="notes">
+<ul>
+<li>now use any brms function, e.g. summary, loo, marginal_effects, tidybayes</li>
+</ul>
+</aside>
+</section></section>
+<section><section id="resources" class="title-slide slide level1"><h1>Resources</h1></section><section id="resources-1" class="slide level2">
+<h2>Resources</h2>
+<ul>
+<li>Richard McElreath: <a href="https://github.com/rmcelreath/cmdstan_map_rect_tutorial">simple logistic regression with cmdStan</a>.</li>
+<li>Ignacio: <a href="https://blog.ignacio.website/post/multithreading-and-map-reduce-in-stan/">broken</a>?</li>
+<li>Stan user guide: <a href="https://mc-stan.org/docs/2_19/stan-users-guide/map-reduce-chapter.html">hierarchical logistic regression with balanced design</a>.</li>
+<li>My blog post: <a href="https://www.briancallander.com/posts/map_rect/speeding_up_bayesian_sampling_with_map_rect.html">hierarchical ordinal regression with rstan</a>.</li>
+</ul>
+</section></section>
+    </div>
+  </div>
+
+  <script src="presentation_files/reveal.js-3.3.0.1/lib/js/head.min.js"></script>
+  <script src="presentation_files/reveal.js-3.3.0.1/js/reveal.js"></script>
+
+  <script>
+
+      // Full list of configuration options available at:
+      // https://github.com/hakimel/reveal.js#configuration
+      Reveal.initialize({
+        // Display the page number of the current slide
+        slideNumber: false,
+        // Push each slide change to the browser history
+        history: true,
+        // Vertical centering of slides
+        center: true,
+        // Opens links in an iframe preview overlay
+        previewLinks: true,
+        // Transition style
+        transition: 'default', // none/fade/slide/convex/concave/zoom
+        // Transition style for full page slide backgrounds
+        backgroundTransition: 'default', // none/fade/slide/convex/concave/zoom
+
+
+
+        // Optional reveal.js plugins
+        dependencies: [
+          { src: 'presentation_files/reveal.js-3.3.0.1/plugin/notes/notes.js', async: true },
+        ]
+      });
+    </script>
+  <!-- dynamically load mathjax for compatibility with self-contained -->
+  <script>
+    (function () {
+      var script = document.createElement("script");
+      script.type = "text/javascript";
+      script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+      document.getElementsByTagName("head")[0].appendChild(script);
+    })();
+  </script>
+
+<script>
+  (function() {
+    if (window.jQuery) {
+      Reveal.addEventListener( 'slidechanged', function(event) {  
+        window.jQuery(event.previousSlide).trigger('hidden');
+        window.jQuery(event.currentSlide).trigger('shown');
+      });
+    }
+  })();
+</script>
+
+
+  </body>
+</html>
