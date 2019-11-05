@@ -1,4 +1,7 @@
 functions {
+  // This function gets applied to each shard.
+  // Global parameters are sent to every node.
+  // Local parameters are only sent to that node computing that shard
   vector lp(vector global, vector local, real[] xr, int[] xi) {
     int M = xi[1];
     int y[M] = xi[2:M+1];
@@ -11,6 +14,7 @@ functions {
     return [ll]';
   }
 
+  // Count the number of observations per level
   int[] count(int[] factr, int L) {
     int N = size(factr);
     int counts[L] = rep_array(0, L);
@@ -33,6 +37,7 @@ transformed data {
 
   int<lower = 1> S = max(counts) + 1; // size of each shard
 
+  // both must have the same size for the first dimension (L)
   int xi[L, S];
   real xr[L, S];
 
@@ -52,6 +57,7 @@ parameters {
 }
 
 model {
+  // package up parameters for mapping
   vector[2] global = [mu, sigma]';
 
   vector[1] local[L];
@@ -59,6 +65,12 @@ model {
     local[j] = [alpha[j]]';
   }
 
+  // priors
+  mu ~ normal(0, 1);
+  alpha ~ normal(0, 1);
+  sigma ~ normal(0, 0.5);
+
+  // likelihood (via map-reduce)
   target += sum(
     map_rect(lp, global, local, xr, xi)
   );
